@@ -5,6 +5,7 @@ import io
 import pickle
 from pathlib import Path
 import contextlib
+import threading
 
 import pandas as pd
 
@@ -644,6 +645,21 @@ def test_unhashable_index_values(builder):
     assert index_items == [[1, 2], [2, 3]]
 
 
+def test_unpickable_non_persisted_entity(builder):
+    @builder
+    @bn.persist(False)
+    def unpicklable_lock():
+        return threading.Lock()
+
+    @builder
+    def uses_lock(unpicklable_lock):
+        unpicklable_lock.acquire()
+        unpicklable_lock.release()
+        return True
+
+    assert builder.build().get("uses_lock")
+
+    
 def test_entity_serialization_exception(builder):
     @builder
     def unpicklable_value():
