@@ -47,6 +47,8 @@ class EntityDeriver(object):
         self._is_ready_for_full_resolution = False
         self._persistent_cache = None
         self._versioning_policy = None
+        self._executor = None
+        self._manager = None
 
     def get_ready(self):
         """
@@ -138,6 +140,14 @@ class EntityDeriver(object):
 
         self._versioning_policy = self._bootstrap_singleton_entity(
             "core__versioning_policy"
+        )
+        
+        self._executor = self._bootstrap_singleton_entity(
+            "core__process_executor"
+        )
+
+        self._manager = self._bootstrap_singleton_entity(
+            "core__process_manager"
         )
 
         self._is_ready_for_full_resolution = True

@@ -11,6 +11,9 @@ from importlib import reload
 from textwrap import dedent
 from uuid import uuid4
 
+from loky import get_reusable_executor
+from multiprocessing.managers import BaseManager
+
 import pyrsistent as pyrs
 import pandas as pd
 
@@ -30,7 +33,7 @@ from .provider import (
     provider_wrapper,
     AttrUpdateProvider,
 )
-from .deriver import EntityDeriver
+from .deriver import EntityDeriver, TaskKeyLogger
 from .descriptors import DescriptorNode
 from . import decorators
 from .util import (
@@ -1565,5 +1568,22 @@ def create_default_flow_state():
             local_store=core__persistent_cache__local_store,
             cloud_store=core__persistent_cache__cloud_store,
         )
+
+    @builder
+    @decorators.immediate
+    def core__process_executor():
+        # uses cloudpickle by default
+        return get_reusable_executor(max_workers=1)
+
+    @builder
+    @decorators.immediate
+    def core__process_manager():
+        class MyManager(BaseManager):
+            pass
+        MyManager.register('TaskKeyLogger', TaskKeyLogger)
+
+        manager = MyManager()
+        manager.start()
+        return manager
 
     return builder._state.mark_all_providers_default()

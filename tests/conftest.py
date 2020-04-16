@@ -3,17 +3,53 @@ import pytest
 import getpass
 import random
 
+from multiprocessing.managers import SyncManager
+from loky import get_reusable_executor
+
 from .helpers import gsutil_path_exists, gsutil_wipe_path
 
 import bionic as bn
+from bionic.decorators import persist
+
+
+@pytest.fixture(scope="session")
+def executor():
+    print("getting an executor")
+    return get_reusable_executor()
+
+
+@pytest.fixture(scope="session")
+def manager():
+    class MyManager(SyncManager):
+        pass
+
+    # MyManager.register('Counter', ResettingCounter)
+    # MyManager.register('TaskKeyLogger', TaskKeyLogger)
+    manager = MyManager()
+    manager.start()
+    return manager
 
 
 # We provide this at the top level because we want everyone using FlowBuilder
 # to use a temporary directory rather than the default one.
 @pytest.fixture(scope="function")
-def builder(tmp_path):
+def builder(executor, manager, tmp_path):
     builder = bn.FlowBuilder("test")
     builder.set("core__persistent_cache__flow_dir", str(tmp_path / "BNTESTDATA"))
+
+    # We can't use builder.set here because that uses ValueProvider which tries to
+    # tokenize the value by writing / pickling it. We go around that issue by making
+    # them use FunctionProvider.
+    @builder
+    @persist(False)
+    def core__process_executor():
+        return executor
+
+    @builder 
+    @persist(False)
+    def core__process_manager():
+        return manager
+
     return builder
 
 

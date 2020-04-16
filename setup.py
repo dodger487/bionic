@@ -17,6 +17,8 @@ with open("README.md") as readme_file:
 
 requirements = [
     "attrs",
+    "cloudpickle",
+    "loky",
     "PyYAML",
     "numpy",
     "pandas",
