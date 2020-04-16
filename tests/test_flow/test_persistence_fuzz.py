@@ -19,11 +19,11 @@ class SimpleFlowModel(object):
     validate large flows.
     """
 
-    def __init__(self, builder):
+    def __init__(self, builder, manager):
         self._builder = builder
 
         self._entities_by_name = {}
-        self._last_called_names = []
+        self._last_called_names = manager.list([])
 
     def add_entity(self, dep_names, nondeterministic=False):
         name = f"e{len(self._entities_by_name) + 1}"
@@ -120,7 +120,7 @@ class SimpleFlowModel(object):
 
     def called_entity_names(self):
         names = list(self._last_called_names)
-        self._last_called_names.clear()
+        self.reset_called_entity_names()
         return names
 
     def peek_called_entity_names(self):
@@ -128,7 +128,7 @@ class SimpleFlowModel(object):
         return names
 
     def reset_called_entity_names(self):
-        self._last_called_names.clear()
+        self._last_called_names[:] = []
 
     def _create_entity(self, name, dep_names, is_nondeterministic):
         entity = ModelEntity(
@@ -206,8 +206,8 @@ class Fuzzer(object):
     behavior is as expected.
     """
 
-    def __init__(self, builder, random_seed=0):
-        self.model = SimpleFlowModel(builder)
+    def __init__(self, builder, manager, random_seed=0):
+        self.model = SimpleFlowModel(builder, manager)
         self._versioning_mode = "manual"
         self._builder = builder
         self._random = Random(random_seed)
@@ -376,10 +376,10 @@ class Fuzzer(object):
 
 
 @pytest.fixture(scope="function")
-def fuzzer(builder, tmp_path):
+def fuzzer(builder, manager, tmp_path):
     fake_cloud_store = FakeCloudStore(str(tmp_path / "BNTESTDATA_FAKE_CLOUD"))
     builder.set("core__persistent_cache__cloud_store", fake_cloud_store)
-    return Fuzzer(builder)
+    return Fuzzer(builder, manager)
 
 
 foreach_mode = pytest.mark.parametrize("versioning_mode", ["manual", "assist", "auto"])

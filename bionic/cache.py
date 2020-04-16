@@ -271,7 +271,7 @@ class CacheAccessor(object):
         return None
 
     def _get_local_entry(self):
-        if self._stored_local_entry is None:
+        if self._stored_local_entry is None or not self._stored_local_entry.has_artifact:
             self._stored_local_entry = self._local.inventory.find_entry(self.query)
         return self._stored_local_entry
 

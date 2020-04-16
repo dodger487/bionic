@@ -6,10 +6,11 @@ import random
 from multiprocessing.managers import SyncManager
 from loky import get_reusable_executor
 
-from .helpers import gsutil_path_exists, gsutil_wipe_path
+from .helpers import gsutil_path_exists, gsutil_wipe_path, ResettingCounter
 
 import bionic as bn
 from bionic.decorators import persist
+from bionic.deriver import TaskKeyLogger
 
 
 @pytest.fixture(scope="session")
@@ -23,8 +24,8 @@ def manager():
     class MyManager(SyncManager):
         pass
 
-    # MyManager.register('Counter', ResettingCounter)
-    # MyManager.register('TaskKeyLogger', TaskKeyLogger)
+    MyManager.register('ResettingCounter', ResettingCounter)
+    MyManager.register('TaskKeyLogger', TaskKeyLogger)
     manager = MyManager()
     manager.start()
     return manager

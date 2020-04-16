@@ -299,7 +299,29 @@ class EntityDeriver(object):
             self._initialize_task_state(state)
 
             # If the task isn't complete or blocked, we can complete the task.
-            complete_task_state(state, task_key_logger)
+
+            # self._executor is None only when bootstrapping. Later, it can be None
+            # when user elects to not use parallel processing.
+            if not state.provider.attrs.should_persist() or self._executor is None:
+                # NOTE 1: This makes non-persisted entities compute here as well 
+                # as in executor pool. We need to keep track of what needs to be
+                # computed in main process vs subprocess when entity is not persisted.
+                # NOTE 2: Right now, non-persisted entities include simple lookup values
+                # which we should not be really sending using IPC. We should read/write
+                # a tmp file for this instead to use protocol for serialization instead of
+                # using cloudpickle.
+                complete_task_state(state, task_key_logger)
+            else:
+                # NOTE 1: Logging support for multiple processes not done yet.
+                # NOTE 2: Non-persisted entities are not computed inside the executor yet.
+                # Right now the tests pass because all non-persisted entities are serializable
+                # but that won't always be the case.
+                ex = self._executor.submit(complete_task_state, state, task_key_logger)
+                ex.result()
+                state.is_complete = True
+
+                # Value hash populated inside complete_task_state() call isn't communicated back.
+                self._populate_task_state_value_hash(state)
 
             # See if we can unblock any other states now that we've completed this one.
             unblocked_states = blockage_tracker.get_unblocked_by(state)
@@ -435,6 +457,18 @@ class EntityDeriver(object):
 
         for accessor in accessors_needing_saving:
             accessor.update_provenance()
+
+    def _populate_task_state_value_hash(self, task_state):
+        if task_state.result_value_hashes_by_name is not None:
+            return
+
+        result_value_hashes_by_name = {}
+        for ix, query in enumerate(task_state.queries):
+            accessor = task_state.cache_accessors[ix]
+            value_hash = accessor.load_result_value_hash()
+            result_value_hashes_by_name[query.dnode.to_entity_name()] = value_hash
+
+        task_state.result_value_hashes_by_name = result_value_hashes_by_name
 
 
 class TaskKeyLogger:

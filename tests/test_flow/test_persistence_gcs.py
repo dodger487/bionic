@@ -53,10 +53,10 @@ def gcs_builder(builder, tmp_gcs_url_prefix):
 # place.
 # TODO Now that we have a workspace fixture and cached client initialization,
 # this may not be true anymore.
-def test_gcs_caching(gcs_builder):
+def test_gcs_caching(gcs_builder, manager):
     # Setup.
 
-    call_counter = ResettingCounter()
+    call_counter = manager.ResettingCounter()
 
     builder = gcs_builder
 

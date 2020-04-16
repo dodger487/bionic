@@ -572,39 +572,40 @@ def test_all_entity_names(preset_flow):
     }
 
 
-def test_in_memory_caching(builder):
+def test_in_memory_caching(builder, manager):
     builder.assign("x", 2)
     builder.assign("y", 3)
 
+    counter = manager.ResettingCounter()
     @builder
     @bn.persist(False)
-    @count_calls
+    @count_calls(counter)
     def xy(x, y):
         return x * y
 
     flow = builder.build()
 
     assert flow.get("xy") == 6
-    assert xy.times_called() == 1
+    assert counter.times_called() == 1
 
     assert flow.get("xy") == 6
-    assert xy.times_called() == 0
+    assert counter.times_called() == 0
 
     flow = builder.build()
 
     assert flow.get("xy") == 6
-    assert xy.times_called() == 1
+    assert counter.times_called() == 1
 
     new_flow = flow.setting("y", values=[4, 5])
 
     assert new_flow.get("xy", set) == {8, 10}
-    assert xy.times_called() == 2
+    assert counter.times_called() == 2
 
     assert new_flow.get("xy", set) == {8, 10}
-    assert xy.times_called() == 0
+    assert counter.times_called() == 0
 
     assert flow.get("xy") == 6
-    assert xy.times_called() == 0
+    assert counter.times_called() == 0
 
 
 def test_to_builder(builder):
@@ -655,7 +656,7 @@ def test_entity_serialization_exception(builder):
         builder.build().get("unpicklable_value")
     except EntitySerializationError as e:
         # AttributeError is what happens when we try to pickle a function.
-        assert isinstance(e.__cause__, AttributeError)
+        assert "\nAttributeError:" in e.__cause__.tb
 
 
 def test_entity_computation_exception(builder):
@@ -666,7 +667,7 @@ def test_entity_computation_exception(builder):
     try:
         builder.build().get("uncomputable_value")
     except EntityComputationError as e:
-        assert isinstance(e.__cause__, ZeroDivisionError)
+        assert "\nZeroDivisionError:" in e.__cause__.tb
 
 
 def test_multiple_compute_attempts(builder):

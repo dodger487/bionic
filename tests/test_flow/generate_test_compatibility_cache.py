@@ -13,6 +13,7 @@
 
 import os
 
+from ..conftest import manager
 from ..helpers import count_calls
 
 import bionic as bn
@@ -25,13 +26,10 @@ CACHE_TEST_DIR = os.path.join(
 
 class Harness:
     """
-    Holds a simple Bionic flow alongside the different functions used in it.
-    The functions are exposed separately since the tests that use the flow
-    asserts the number of times the methods were invoked in the flow using
-    the @count_calls annotation which is not exposed by Bionic.
+    Holds a simple Bionic flow with counters to all the functions in it.
     """
 
-    def __init__(self, cache_dir):
+    def __init__(self, cache_dir, manager):
         builder = bn.FlowBuilder("test")
 
         builder.set("core__persistent_cache__flow_dir", cache_dir)
@@ -39,29 +37,33 @@ class Harness:
         builder.assign("y", 3)
         builder.assign("z", 4)
 
+        xy_counter = manager.ResettingCounter()
         @builder
-        @count_calls
+        @count_calls(xy_counter)
         def xy(x, y):
             return x * y
 
+        yz_counter = manager.ResettingCounter()
         @builder
-        @count_calls
+        @count_calls(yz_counter)
         def yz(y, z):
             return y * z
 
+        xy_plus_yz_counter = manager.ResettingCounter()
         @builder
-        @count_calls
+        @count_calls(xy_plus_yz_counter)
         def xy_plus_yz(xy, yz):
             return xy + yz
 
         self.flow = builder.build()
-        self.xy = xy
-        self.yz = yz
-        self.xy_plus_yz = xy_plus_yz
+        self.xy_counter = xy_counter
+        self.yz_counter = yz_counter
+        self.xy_plus_yz_counter = xy_plus_yz_counter
 
 
 if __name__ == "__main__":
-    flow = Harness(CACHE_TEST_DIR).flow
+    my_manager = manager()
+    flow = Harness(CACHE_TEST_DIR, my_manager).flow
 
     # call methods to write to cache
     flow.get("xy")
