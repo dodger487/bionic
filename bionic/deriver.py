@@ -3,6 +3,7 @@ Contains the core logic for resolving Entities by executing Tasks.
 """
 
 from collections import defaultdict
+import copy
 
 from .datatypes import ProvenanceDigest, Query, ResultGroup
 from .cache import Provenance
@@ -316,7 +317,8 @@ class EntityDeriver(object):
                 # NOTE 2: Non-persisted entities are not computed inside the executor yet.
                 # Right now the tests pass because all non-persisted entities are serializable
                 # but that won't always be the case.
-                ex = self._executor.submit(complete_task_state, state, task_key_logger)
+                new_state_for_subprocess = self._new_task_state_for_subprocess(state, True, {})
+                ex = self._executor.submit(complete_task_state, new_state_for_subprocess, task_key_logger)
                 ex.result()
                 state.is_complete = True
 
@@ -469,6 +471,43 @@ class EntityDeriver(object):
             result_value_hashes_by_name[query.dnode.to_entity_name()] = value_hash
 
         task_state.result_value_hashes_by_name = result_value_hashes_by_name
+
+    # Trims extra stuff from task states to reduce the amount of info sent to 
+    # the subprocess. This can be optimized further.
+    def _new_task_state_for_subprocess(
+        self, task_state, to_be_computed, new_task_states_by_key,
+    ):
+        # All task keys should point to the same task state.
+        if task_state.task.keys[0] in new_task_states_by_key:
+            return new_task_states_by_key[task_state.task.keys[0]]
+
+        # Let's make a copy of the task state.
+        # Note that this is not a deep copy so don't mutate so be careful when 
+        # mutating state variables.
+        task_state = copy.copy(task_state)
+        task_state._results_by_name = None
+
+        task_keys = task_state.task.keys
+        if to_be_computed:
+            new_dep_states = []
+            for dep_state in task_state.dep_states:
+                # We will need to compute the dependency in subprocess if it's not persisted.
+                dep_to_be_computed = not dep_state.provider.attrs.should_persist()
+                new_dep_state = self._new_task_state_for_subprocess(
+                    dep_state, dep_to_be_computed, new_task_states_by_key,
+                )
+                new_dep_states.append(new_dep_state)
+            task_state.dep_states = new_dep_states
+        else:
+            # We don't need deps for task states that won't be computed in subprocess.
+            task_state.dep_states = []
+
+            # Uncomment these later when we remove their usage in execution.
+            # task_state.provider = None
+            # task_state.task = None
+
+        new_task_states_by_key[task_state.task.keys[0]] = task_state
+        return task_state
 
 
 class TaskKeyLogger:

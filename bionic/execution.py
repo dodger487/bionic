@@ -30,6 +30,12 @@ def complete_task_state(task_state, task_key_logger):
 def get_results_for_complete_task_state(task_state, task_key_logger):
     assert task_state.is_complete
 
+    # If task state should persist but results aren't cached, that's probably
+    # because the results aren't communicated between processes. Compute the results
+    # in memory cache for the subprocess.
+    if not task_state.provider.attrs.should_persist() and not task_state._results_by_name:
+        _compute_task_state(task_state, task_key_logger)
+
     if task_state._results_by_name:
         for task_key in task_state.task.keys:
             task_key_logger.log_accessed_from_memory(task_key)
