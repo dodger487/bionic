@@ -397,7 +397,7 @@ class EntityDeriver(object):
             )
             for task_key in task_state.task.keys
         ]
-
+ 
         # Lastly, set up cache accessors.
         if task_state.provider.attrs.should_persist():
             if not self._is_ready_for_full_resolution:
@@ -485,9 +485,12 @@ class EntityDeriver(object):
         # Note that this is not a deep copy so don't mutate so be careful when 
         # mutating state variables.
         task_state = copy.copy(task_state)
+
+        task_state.provider = None
+        task_state.case_key = None
+        task_state.provenance = None
         task_state._results_by_name = None
 
-        task_keys = task_state.task.keys
         if to_be_computed:
             new_dep_states = []
             for dep_state in task_state.dep_states:
@@ -501,12 +504,11 @@ class EntityDeriver(object):
         else:
             # We don't need deps for task states that won't be computed in subprocess.
             task_state.dep_states = []
+            task_state.task = None
 
-            # Uncomment these later when we remove their usage in execution.
-            # task_state.provider = None
-            # task_state.task = None
+            task_state.queries = None
 
-        new_task_states_by_key[task_state.task.keys[0]] = task_state
+        new_task_states_by_key[task_state.task_keys[0]] = task_state
         return task_state
 
 
@@ -555,8 +557,12 @@ class TaskState(object):
     def __init__(self, task, dep_states, case_key, provider):
         self.task = task
         self.dep_states = dep_states
-        self.case_key = case_key
         self.provider = provider
+
+        self.task_keys = task.keys
+        self.case_key = case_key
+        self.should_memoize = provider.attrs.should_memoize()
+        self.should_persist = provider.attrs.should_persist()
 
         # These are set by complete_task_state(), just
         # before the task state becomes eligible for cache lookup / computation.

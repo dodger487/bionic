@@ -10,7 +10,7 @@ def complete_task_state(task_state, task_key_logger):
     assert not task_state.is_complete
 
     # See if we can load it from the cache.
-    if task_state.provider.attrs.should_persist() and all(
+    if task_state.should_persist and all(
         axr.can_load() for axr in task_state.cache_accessors
     ):
         # We only load the hashed result while completing task state
@@ -33,11 +33,11 @@ def get_results_for_complete_task_state(task_state, task_key_logger):
     # If task state should persist but results aren't cached, that's probably
     # because the results aren't communicated between processes. Compute the results
     # in memory cache for the subprocess.
-    if not task_state.provider.attrs.should_persist() and not task_state._results_by_name:
+    if not task_state.should_persist and not task_state._results_by_name:
         _compute_task_state(task_state, task_key_logger)
 
     if task_state._results_by_name:
-        for task_key in task_state.task.keys:
+        for task_key in task_state.task_keys:
             task_key_logger.log_accessed_from_memory(task_key)
         return task_state._results_by_name
 
@@ -52,7 +52,7 @@ def get_results_for_complete_task_state(task_state, task_key_logger):
 
         results_by_name[result.query.dnode.to_entity_name()] = result
 
-    if task_state.provider.attrs.should_memoize():
+    if task_state.should_memoize:
         task_state._results_by_name = results_by_name
 
     return results_by_name
@@ -67,22 +67,20 @@ def _compute_task_state(task_state, task_key_logger):
         for dep_state, dep_key in zip(task_state.dep_states, task.dep_keys)
     ]
 
-    provider = task_state.provider
-
     if not task.is_simple_lookup:
-        for task_key in task.keys:
+        for task_key in task_state.task_keys:
             task_key_logger.log_computing(task_key)
 
     dep_values = [dep_result.value for dep_result in dep_results]
 
     values = task_state.task.compute(dep_values)
-    assert len(values) == len(provider.attrs.names)
+    assert len(values) == len(task_state.task_keys)
 
-    for query in task_state.queries:
+    for task_key in task_state.task_keys:
         if task.is_simple_lookup:
-            task_key_logger.log_accessed_from_definition(query.task_key)
+            task_key_logger.log_accessed_from_definition(task_key)
         else:
-            task_key_logger.log_computed(query.task_key)
+            task_key_logger.log_computed(task_key)
 
     results_by_name = {}
     result_value_hashes_by_name = {}
@@ -91,7 +89,7 @@ def _compute_task_state(task_state, task_key_logger):
 
         result = Result(query=query, value=value,)
 
-        if provider.attrs.should_persist():
+        if task_state.should_persist:
             accessor = task_state.cache_accessors[ix]
             accessor.save_result(result)
 
@@ -104,9 +102,9 @@ def _compute_task_state(task_state, task_key_logger):
     # Otherwise, load it lazily later so that if the serialized/deserialized
     # value is not exactly the same as the original, we still
     # always return the same value.
-    if provider.attrs.should_memoize() and not provider.attrs.should_persist():
+    if task_state.should_memoize and not task_state.should_persist:
         task_state._results_by_name = results_by_name
 
     # But we cache the hashed values eagerly since they are cheap to load.
-    if provider.attrs.should_persist():
+    if task_state.should_persist:
         task_state.result_value_hashes_by_name = result_value_hashes_by_name
