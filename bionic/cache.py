@@ -753,6 +753,20 @@ class GcsFilesystem:
         return self._tool.blob_from_url(url).download_as_string()
 
 
+_cached_gcs_buckets_by_name = {}
+
+
+def get_cached_bucket(bucket_name):
+    global _cached_gcs_buckets_by_name
+
+    if bucket_name not in _cached_gcs_buckets_by_name:
+        _cached_gcs_buckets_by_name[
+            bucket_name
+        ] = get_gcs_client_without_warnings().get_bucket(bucket_name)
+
+    return _cached_gcs_buckets_by_name[bucket_name]
+
+
 class GcsTool:
     """
     A helper object providing utility methods for accessing a GCS.  Maintains
@@ -766,22 +780,22 @@ class GcsTool:
             url = url[:-1]
         self.url = url
         bucket_name, object_prefix = self._bucket_and_object_names_from_url(url)
-
-        logger.info("Initializing GCS client ...")
-        self._client = get_gcs_client_without_warnings()
-        self._bucket = self._client.get_bucket(bucket_name)
+        self.bucket_name = bucket_name
         self._object_prefix = object_prefix
+
+    def _get_bucket(self):
+        return get_cached_bucket(self.bucket_name)
 
     def blob_from_url(self, url):
         object_name = self._validated_object_name_from_url(url)
-        return self._bucket.blob(object_name)
+        return self._get_bucket().blob(object_name)
 
     def url_from_object_name(self, object_name):
-        return self._GS_URL_PREFIX + self._bucket.name + "/" + object_name
+        return self._GS_URL_PREFIX + self._get_bucket().name + "/" + object_name
 
     def blobs_matching_url_prefix(self, url_prefix):
         obj_prefix = self._validated_object_name_from_url(url_prefix)
-        return self._bucket.list_blobs(prefix=obj_prefix)
+        return self._get_bucket().list_blobs(prefix=obj_prefix)
 
     def gsutil_cp(self, src_url, dst_url):
         args = [
@@ -799,7 +813,7 @@ class GcsTool:
 
     def _validated_object_name_from_url(self, url):
         bucket_name, object_name = self._bucket_and_object_names_from_url(url)
-        assert bucket_name == self._bucket.name
+        assert bucket_name == self._get_bucket().name
         assert object_name.startswith(self._object_prefix)
         return object_name
 
